@@ -11,6 +11,7 @@ Usage:
     python scripts/run_sweep.py
 """
 
+import argparse
 import json
 import os
 import sys
@@ -33,9 +34,9 @@ from src.data import prepare_datasets
 from src.train import train
 
 
-def run_sweep() -> dict:
+def run_sweep(target_model: str = None) -> dict:
     """
-    Run the full LR sweep for all models.
+    Run the full LR sweep for all models (or a single target model).
 
     Returns a nested dictionary:
         results[model_name][lr_str] = {
@@ -49,17 +50,21 @@ def run_sweep() -> dict:
     ensure_dirs()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    models_to_run = [target_model] if target_model else MODELS
+    
     print(f"[sweep] Device: {device}")
-    print(f"[sweep] Models: {len(MODELS)}")
+    print(f"[sweep] Models: {len(models_to_run)}")
     print(f"[sweep] LR grid: {LR_GRID}")
-    print(f"[sweep] Total runs: {len(MODELS) * len(LR_GRID)}")
+    print(f"[sweep] Total runs: {len(models_to_run) * len(LR_GRID)}")
 
     all_results = {}
     run_count = 0
-    total_runs = len(MODELS) * len(LR_GRID)
+    total_runs = len(models_to_run) * len(LR_GRID)
 
-    for model_name in MODELS:
-        size_label = MODEL_SIZE_LABELS[model_name]
+    for model_name in models_to_run:
+        # If model is not in config, use its base name as label
+        size_label = MODEL_SIZE_LABELS.get(model_name, model_name.split('/')[-1])
         print(f"\n{'='*70}")
         print(f"[sweep] Model: {size_label} ({model_name})")
         print(f"{'='*70}")
@@ -96,11 +101,22 @@ def run_sweep() -> dict:
                 "stopped_early": result["stopped_early"],
             }
 
-            # Save incremental results (in case of crash)
-            all_results[model_name] = {
+            # Retrieve existing results to not overwrite other models' data
+            results_path = os.path.join(RESULTS_DIR, "sweep_results.json")
+            saved_results = {}
+            if os.path.exists(results_path):
+                try:
+                    with open(results_path, "r") as f:
+                        saved_results = json.load(f)
+                except json.JSONDecodeError:
+                    pass
+            
+            # Update with current model's results
+            saved_results[model_name] = {
                 "model_size": size_label,
                 "runs": model_results,
             }
+            all_results.update(saved_results)
             _save_results(all_results)
 
         # ── Print per-model summary ──────────────────────────────────
@@ -137,5 +153,17 @@ def _save_results(results: dict) -> None:
         json.dump(results, f, indent=2)
 
 
+def main():
+    parser = argparse.ArgumentParser(description="Orchestrate learning rate sweep")
+    parser.add_argument(
+        "--model", 
+        type=str, 
+        default=None, 
+        help="Optional: Run sweep for a single model only (e.g., HuggingFaceTB/SmolLM2-135M-Instruct). If not specified, runs all models in config."
+    )
+    args = parser.parse_args()
+    
+    run_sweep(target_model=args.model)
+
 if __name__ == "__main__":
-    run_sweep()
+    main()
