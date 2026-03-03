@@ -42,7 +42,7 @@ TRAIN_DATASET = "cosimoiaia/Loquace-102k"
 EVAL_DATASET = "efederici/MMLU-Pro-ita"
 
 # Subset size for training data (set to None to use full dataset)
-TRAIN_SUBSET_SIZE = 20_000
+TRAIN_SUBSET_SIZE = 4_000
 
 # Validation split ratio
 VAL_SPLIT_RATIO = 0.15
