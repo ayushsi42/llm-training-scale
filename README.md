@@ -49,7 +49,9 @@ Run all steps sequentially from the **project root**:
 python scripts/run_baselines.py
 
 # 2. LR Sweep — fine-tune all models across 10 learning rates (30 runs)
-python scripts/run_sweep.py
+#    Split into two batches of 5 LRs each:
+python scripts/run_sweep.py --lr 5e-6 1e-5 2e-5 5e-5 1e-4
+python scripts/run_sweep.py --lr 2e-4 5e-4 1e-3 2e-3 5e-3
 
 # 3. Post-Training Evaluation — MMLU-PRO-Ita on all fine-tuned checkpoints
 python scripts/run_post_eval.py

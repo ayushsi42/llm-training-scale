@@ -9,6 +9,8 @@ For each model × each LR (3 × 10 = 30 runs):
 
 Usage:
     python scripts/run_sweep.py
+    python scripts/run_sweep.py --lr 5e-6 1e-5 2e-5 5e-5 1e-4
+    python scripts/run_sweep.py --model HuggingFaceTB/SmolLM2-135M-Instruct --lr 1e-4 2e-4
 """
 
 import argparse
@@ -34,7 +36,7 @@ from src.data import prepare_datasets
 from src.train import train
 
 
-def run_sweep(target_model: str = None) -> dict:
+def run_sweep(target_model: str = None, target_lrs: list = None) -> dict:
     """
     Run the full LR sweep for all models (or a single target model).
 
@@ -50,17 +52,18 @@ def run_sweep(target_model: str = None) -> dict:
     ensure_dirs()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+
     models_to_run = [target_model] if target_model else MODELS
+    lrs_to_run = target_lrs if target_lrs else LR_GRID
     
     print(f"[sweep] Device: {device}")
     print(f"[sweep] Models: {len(models_to_run)}")
-    print(f"[sweep] LR grid: {LR_GRID}")
-    print(f"[sweep] Total runs: {len(models_to_run) * len(LR_GRID)}")
+    print(f"[sweep] LR grid: {lrs_to_run}")
+    print(f"[sweep] Total runs: {len(models_to_run) * len(lrs_to_run)}")
 
     all_results = {}
     run_count = 0
-    total_runs = len(models_to_run) * len(LR_GRID)
+    total_runs = len(models_to_run) * len(lrs_to_run)
 
     for model_name in models_to_run:
         # If model is not in config, use its base name as label
@@ -75,7 +78,7 @@ def run_sweep(target_model: str = None) -> dict:
         print(f"[sweep] Loading dataset for {size_label}...")
         ds_dict, tokenizer = prepare_datasets(model_name)
 
-        for lr in LR_GRID:
+        for lr in lrs_to_run:
             run_count += 1
             lr_str = f"{lr:.0e}"
             print(f"\n[sweep] Run {run_count}/{total_runs}: "
@@ -161,9 +164,16 @@ def main():
         default=None, 
         help="Optional: Run sweep for a single model only (e.g., HuggingFaceTB/SmolLM2-135M-Instruct). If not specified, runs all models in config."
     )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Optional: Specific learning rate(s) to sweep (e.g., --lr 5e-6 1e-5 2e-5). If not specified, uses full LR_GRID from config."
+    )
     args = parser.parse_args()
     
-    run_sweep(target_model=args.model)
+    run_sweep(target_model=args.model, target_lrs=args.lr)
 
 if __name__ == "__main__":
     main()
