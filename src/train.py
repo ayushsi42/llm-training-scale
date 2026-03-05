@@ -174,7 +174,6 @@ def train(
 
         # Misc
         remove_unused_columns=False,
-        group_by_length=False,
     )
 
     # ── SFTTrainer ───────────────────────────────────────────────────────
