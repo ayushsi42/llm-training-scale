@@ -90,6 +90,9 @@ def train(
 
     tokenizer = tokenizer_preloaded
 
+    # Set max sequence length on tokenizer — SFTTrainer uses this as default
+    tokenizer.model_max_length = MAX_SEQ_LEN
+
     # ── Model ────────────────────────────────────────────────────────────
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
@@ -131,9 +134,6 @@ def train(
     sft_config = SFTConfig(
         output_dir=hf_output_dir,
         run_name=wandb_run_name,
-
-        # Sequence length
-        max_seq_length=MAX_SEQ_LEN,
 
         # Batch size
         per_device_train_batch_size=BATCH_SIZE,
