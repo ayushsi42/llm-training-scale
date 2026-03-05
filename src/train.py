@@ -14,11 +14,10 @@ import torch
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    TrainingArguments,
     EarlyStoppingCallback,
 )
 from peft import LoraConfig
-from trl import SFTTrainer
+from trl import SFTTrainer, SFTConfig
 import wandb
 
 from config import (
@@ -128,10 +127,13 @@ def train(
     if WANDB_ENTITY:
         os.environ["WANDB_ENTITY"] = WANDB_ENTITY
 
-    # ── Training Arguments ───────────────────────────────────────────────
-    training_args = TrainingArguments(
+    # ── SFT Config (replaces TrainingArguments) ────────────────────────
+    sft_config = SFTConfig(
         output_dir=hf_output_dir,
         run_name=wandb_run_name,
+
+        # Sequence length
+        max_seq_length=MAX_SEQ_LEN,
 
         # Batch size
         per_device_train_batch_size=BATCH_SIZE,
@@ -179,12 +181,11 @@ def train(
     # ── SFTTrainer ───────────────────────────────────────────────────────
     trainer = SFTTrainer(
         model=model,
-        args=training_args,
+        args=sft_config,
         train_dataset=ds_dict["train"],
         eval_dataset=ds_dict["validation"],
         processing_class=tokenizer,
         peft_config=peft_config,
-        max_seq_length=MAX_SEQ_LEN,
         callbacks=[
             EarlyStoppingCallback(
                 early_stopping_patience=EARLY_STOPPING_PATIENCE,
