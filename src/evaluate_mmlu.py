@@ -60,40 +60,59 @@ def format_mmlu_prompt(question: str, options: list[str]) -> str:
     return prompt
 
 
-def compute_option_logprobs(
+def compute_option_logprobs_batch(
     model,
     tokenizer,
-    prompt: str,
-    options: list[str],
+    prompts: list[str],
+    options_list: list[list[str]],
     device: torch.device,
-) -> list[float]:
+) -> list[list[float]]:
     """
     Compute log-probability of each option letter as the next token
-    following the prompt.
+    following the prompt for a batch of prompts.
 
-    Returns a list of log-probabilities, one per option.
+    Returns a list of lists of log-probabilities, one per option per prompt.
     """
     # Tokenize the prompt
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
+    # Need padding to ensure sequences in the batch have the same length
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        
+    inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=1024)
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
     with torch.no_grad():
         outputs = model(**inputs)
-        # Get logits for the last position (where the answer should go)
-        last_logits = outputs.logits[0, -1, :]  # shape: (vocab_size,)
-        log_probs = F.log_softmax(last_logits, dim=-1)
+        
+        # We must index using the attention mask because of padding.
+        # This properly finds the last actual token in each sequence.
+        attention_mask = inputs["attention_mask"]
+        last_token_idx = attention_mask.sum(dim=1) - 1
+        
+        batch_size = outputs.logits.size(0)
+        last_logits = outputs.logits[torch.arange(batch_size, device=device), last_token_idx, :]
+        log_probs = F.log_softmax(last_logits, dim=-1) # shape: (batch_size, vocab_size)
 
     # Get log-prob for each option letter token
-    option_logprobs = []
-    for i in range(len(options)):
-        letter = OPTION_LETTERS[i]
-        # Tokenize just the letter to get its token ID
+    # We assume options are identical letters ('A', 'B', etc.) for all questions in MMLU
+    batch_option_logprobs = []
+    
+    # Pre-compute token IDs for A-J
+    letter_token_ids = []
+    for letter in OPTION_LETTERS:
         letter_ids = tokenizer.encode(letter, add_special_tokens=False)
-        # Use the first token if the letter maps to multiple tokens
-        token_id = letter_ids[0]
-        option_logprobs.append(log_probs[token_id].item())
+        letter_token_ids.append(letter_ids[0])
 
-    return option_logprobs
+    for i in range(len(prompts)):
+        option_logprobs = []
+        # We assume the number of options is the length of the list provided in `options_list[i]`
+        num_opts = len(options_list[i])
+        for j in range(num_opts):
+            token_id = letter_token_ids[j]
+            option_logprobs.append(log_probs[i, token_id].item())
+        batch_option_logprobs.append(option_logprobs)
+
+    return batch_option_logprobs
 
 
 def evaluate_mmlu(
@@ -101,6 +120,7 @@ def evaluate_mmlu(
     tokenizer,
     device: torch.device | None = None,
     max_examples: int | None = None,
+    batch_size: int = 4,
 ) -> dict:
     """
     Run full MMLU-PRO-Ita evaluation.
@@ -134,28 +154,42 @@ def evaluate_mmlu(
     total_correct = 0
     total = 0
 
-    for ex in tqdm(examples, desc="Evaluating MMLU-PRO-Ita"):
-        question = ex["question"]
-        options = ex["options"]
-        correct_answer = ex["answer"]
-        subject = ex["subject"]
+    for i in tqdm(range(0, len(examples), batch_size), desc="Evaluating MMLU-PRO-Ita"):
+        batch = examples[i:i + batch_size]
+        
+        prompts = []
+        options_list = []
+        correct_answers = []
+        subjects = []
+        
+        for ex in batch:
+            question = ex["question"]
+            options = ex["options"]
+            prompts.append(format_mmlu_prompt(question, options))
+            options_list.append(options)
+            correct_answers.append(ex["answer"])
+            subjects.append(ex["subject"])
 
-        # Format prompt and compute log-probs
-        prompt = format_mmlu_prompt(question, options)
-        logprobs = compute_option_logprobs(model, tokenizer, prompt, options, device)
+        # Compute log-probs for the batch
+        batch_logprobs = compute_option_logprobs_batch(model, tokenizer, prompts, options_list, device)
 
-        # Select the option with highest log-probability
-        predicted_idx = max(range(len(logprobs)), key=lambda i: logprobs[i])
-        predicted_answer = OPTION_LETTERS[predicted_idx]
+        for j in range(len(batch)):
+            logprobs = batch_logprobs[j]
+            correct_answer = correct_answers[j]
+            subject = subjects[j]
+            
+            # Select the option with highest log-probability
+            predicted_idx = max(range(len(logprobs)), key=lambda k: logprobs[k])
+            predicted_answer = OPTION_LETTERS[predicted_idx]
 
-        # Check correctness
-        is_correct = predicted_answer == correct_answer
-        if is_correct:
-            total_correct += 1
-            subject_correct[subject] += 1
+            # Check correctness
+            is_correct = predicted_answer == correct_answer
+            if is_correct:
+                total_correct += 1
+                subject_correct[subject] += 1
 
-        total += 1
-        subject_total[subject] += 1
+            total += 1
+            subject_total[subject] += 1
 
     # Compute accuracies
     overall_accuracy = total_correct / total if total > 0 else 0.0
