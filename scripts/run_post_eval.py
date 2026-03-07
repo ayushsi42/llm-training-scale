@@ -10,8 +10,10 @@ For each model:
     - Save structured comparison table
 
 Usage:
-    python scripts/run_post_eval.py
+    python scripts/run_post_eval.py [--sizes 135M 360M 1.7B]
 """
+
+import argparse
 
 import json
 import os
@@ -71,7 +73,7 @@ def load_finetuned_model(
     return model, tokenizer
 
 
-def run_post_eval() -> dict:
+def run_post_eval(selected_sizes: list[str] | None = None) -> dict:
     """
     Evaluate all fine-tuned checkpoints on MMLU-PRO-Ita.
 
@@ -101,6 +103,9 @@ def run_post_eval() -> dict:
 
     for model_name in MODELS:
         size_label = MODEL_SIZE_LABELS[model_name]
+
+        if selected_sizes and size_label not in selected_sizes:
+            continue
 
         if model_name not in sweep_results:
             print(f"[post-eval] Skipping {size_label}: no sweep results found")
@@ -214,4 +219,13 @@ def run_post_eval() -> dict:
 
 
 if __name__ == "__main__":
-    run_post_eval()
+    parser = argparse.ArgumentParser(description="Run post-training evaluation on MMLU-PRO-Ita")
+    parser.add_argument(
+        "--sizes",
+        nargs="+",
+        choices=["135M", "360M", "1.7B"],
+        help="Specify which model sizes to evaluate. If not provided, evaluates all.",
+    )
+    args = parser.parse_args()
+
+    run_post_eval(selected_sizes=args.sizes)
