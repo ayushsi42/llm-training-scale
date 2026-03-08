@@ -66,6 +66,52 @@ For a single standalone training run:
 python scripts/run_single.py --model HuggingFaceTB/SmolLM2-135M-Instruct --lr 1e-4
 ```
 
+### Distributed Post-Eval Scripts
+
+If you need to run the 30 post-finetuning MMLU evaluations independently (e.g., across separate instances due to runtime limits), you can run any of the following combinations. Results will incrementally be appended to `outputs/results/post_eval_results.json`:
+
+**135M Model**
+```bash
+python scripts/run_post_eval.py --sizes 135M --lr 5e-06
+python scripts/run_post_eval.py --sizes 135M --lr 1e-05
+python scripts/run_post_eval.py --sizes 135M --lr 2e-05
+python scripts/run_post_eval.py --sizes 135M --lr 5e-05
+python scripts/run_post_eval.py --sizes 135M --lr 1e-04
+python scripts/run_post_eval.py --sizes 135M --lr 2e-04
+python scripts/run_post_eval.py --sizes 135M --lr 5e-04
+python scripts/run_post_eval.py --sizes 135M --lr 1e-03
+python scripts/run_post_eval.py --sizes 135M --lr 2e-03
+python scripts/run_post_eval.py --sizes 135M --lr 5e-03
+```
+
+**360M Model**
+```bash
+python scripts/run_post_eval.py --sizes 360M --lr 5e-06
+python scripts/run_post_eval.py --sizes 360M --lr 1e-05
+python scripts/run_post_eval.py --sizes 360M --lr 2e-05
+python scripts/run_post_eval.py --sizes 360M --lr 5e-05
+python scripts/run_post_eval.py --sizes 360M --lr 1e-04
+python scripts/run_post_eval.py --sizes 360M --lr 2e-04
+python scripts/run_post_eval.py --sizes 360M --lr 5e-04
+python scripts/run_post_eval.py --sizes 360M --lr 1e-03
+python scripts/run_post_eval.py --sizes 360M --lr 2e-03
+python scripts/run_post_eval.py --sizes 360M --lr 5e-03
+```
+
+**1.7B Model**
+```bash
+python scripts/run_post_eval.py --sizes 1.7B --lr 5e-06
+python scripts/run_post_eval.py --sizes 1.7B --lr 1e-05
+python scripts/run_post_eval.py --sizes 1.7B --lr 2e-05
+python scripts/run_post_eval.py --sizes 1.7B --lr 5e-05
+python scripts/run_post_eval.py --sizes 1.7B --lr 1e-04
+python scripts/run_post_eval.py --sizes 1.7B --lr 2e-04
+python scripts/run_post_eval.py --sizes 1.7B --lr 5e-04
+python scripts/run_post_eval.py --sizes 1.7B --lr 1e-03
+python scripts/run_post_eval.py --sizes 1.7B --lr 2e-03
+python scripts/run_post_eval.py --sizes 1.7B --lr 5e-03
+```
+
 ## Models
 
 | Model | Parameters |

@@ -73,7 +73,7 @@ def load_finetuned_model(
     return model, tokenizer
 
 
-def run_post_eval(selected_sizes: list[str] | None = None, batch_size: int = 8) -> dict:
+def run_post_eval(selected_sizes: list[str] | None = None, selected_lrs: list[float] | None = None, batch_size: int = 4) -> dict:
     """
     Evaluate all fine-tuned checkpoints on MMLU-PRO-Ita.
 
@@ -88,7 +88,14 @@ def run_post_eval(selected_sizes: list[str] | None = None, batch_size: int = 8) 
     print(f"[post-eval] Device: {device}")
 
     # ── Evaluate checkpoints ───────────────────────────────────────────
+    results_path = os.path.join(RESULTS_DIR, "post_eval_results.json")
     all_results = {}
+    if os.path.exists(results_path):
+        try:
+            with open(results_path, "r") as f:
+                all_results = json.load(f)
+        except Exception:
+            pass
 
     for model_name in MODELS:
         size_label = MODEL_SIZE_LABELS[model_name]
@@ -96,14 +103,18 @@ def run_post_eval(selected_sizes: list[str] | None = None, batch_size: int = 8) 
         if selected_sizes and size_label not in selected_sizes:
             continue
 
-        model_results = {}
+        if model_name not in all_results:
+            all_results[model_name] = {"model_size": size_label, "runs": {}}
+            
+        model_results = all_results[model_name]["runs"]
 
         print(f"\n{'='*60}")
         print(f"[post-eval] Model: {size_label}")
         print(f"{'='*60}")
 
         # Evaluate ALL LR checkpoints for this model
-        for lr in LR_GRID:
+        lrs_to_eval = selected_lrs if selected_lrs else LR_GRID
+        for lr in lrs_to_eval:
             lr_str = f"{lr:.0e}"
             ckpt_path = get_checkpoint_path(model_name, lr)
 
@@ -156,20 +167,15 @@ def run_post_eval(selected_sizes: list[str] | None = None, batch_size: int = 8) 
                 "num_total": mmlu_results["num_total"],
             }
 
+            # Save incrementally
+            all_results[model_name]["runs"] = model_results
+            with open(results_path, "w") as f:
+                json.dump(all_results, f, indent=2)
+
             # Free memory
             del model, tokenizer
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-
-        all_results[model_name] = {
-            "model_size": size_label,
-            "runs": model_results,
-        }
-
-    # ── Save results ─────────────────────────────────────────────────
-    results_path = os.path.join(RESULTS_DIR, "post_eval_results.json")
-    with open(results_path, "w") as f:
-        json.dump(all_results, f, indent=2)
 
     print(f"\n[post-eval] Results saved to {results_path}")
 
@@ -178,7 +184,9 @@ def run_post_eval(selected_sizes: list[str] | None = None, batch_size: int = 8) 
     print(f"{'Model':<10} {'LR':>10} {'MMLU Acc':>10}")
     print(f"{'-'*70}")
     for model_name, data in all_results.items():
-        for lr_str, run_data in data["runs"].items():
+        if "runs" not in data or not data["runs"]:
+            continue
+        for lr_str, run_data in sorted(data["runs"].items(), key=lambda x: float(x[0])):
             print(f"{data['model_size']:<10} {lr_str:>10} "
                   f"{run_data.get('mmlu_accuracy', 'N/A'):>10.4f}")
     print(f"{'='*70}")
@@ -195,6 +203,13 @@ if __name__ == "__main__":
         help="Specify which model sizes to evaluate. If not provided, evaluates all.",
     )
     parser.add_argument(
+        "--lr",
+        nargs="+",
+        type=float,
+        default=None,
+        help="Specific learning rate(s) to evaluate (e.g., 5e-6 1e-4). If not provided, evaluates all.",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=4,
@@ -202,4 +217,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    run_post_eval(selected_sizes=args.sizes, batch_size=args.batch_size)
+    run_post_eval(selected_sizes=args.sizes, selected_lrs=args.lr, batch_size=args.batch_size)
